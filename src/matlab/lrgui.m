@@ -28,15 +28,9 @@ function lrgui
          'String',{'Elements','Functions'},...
          'Position',[300,30,100,25],...
          'Callback',@popup_menu_Callback);
-<<<<<<< HEAD
   ha = axes('Units','Pixels','Position',[50,60,200,185]);
   align([hnew,hrefine,hraise,hload,hsave,htikz,htext,hpopup],'Center','None');
 
-=======
-  ha = axes('Units','Pixels','Position',[50,60,200,185]); 
-  align([hnew,hrefine,hload,hsave,htext,hpopup],'Center','None');
-  
->>>>>>> parent of 7f55efc... Added functionality to output lrspline to a vector graphics tikz figure.
   % Create the data to plot.
   current_mesh = LRSplineSurface([3,3], [10,10]);
 
