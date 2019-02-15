@@ -1,10 +1,10 @@
 classdef LRSplineSurface < handle
 % LRSplineSurface Matlab wrapper class for c++ LR-spline object
-%     Locally Refined (LR) B-splines is a technique to achive local adaptivity while using smooth spline 
+%     Locally Refined (LR) B-splines is a technique to achive local adaptivity while using smooth spline
 %     functions. This is a sample library which implements these techniques and can be used for geometric
 %     representations or isogeometric analysis.
-%     
-% LRSplineSurface Properties: 
+%
+% LRSplineSurface Properties:
 %     p        - polynomial degree
 %     knots    - knot vectors
 %     cp       - control points
@@ -12,12 +12,13 @@ classdef LRSplineSurface < handle
 %     lines    - mesh lines, (u0,v0, u1,v1, m), where m is the multiplicity
 %     elements - fintite elements (u0, v0, u1, v1)
 %     support  - element to basis function support list
-%    
+%
 % LRSplineSurface Methods:
 %     LRSplineSurface      - Constructor
 %     copy                 - Performs a deep copy of the spline object
 %     refine               - Performs local refinements
 %     raiseOrder           - Performs global degree elevation
+%     localRaiseOrder      - Performs local  degree elevation
 %     getFunc2Element      - Returns list of elements which a given function have support on
 %     getEdge              - Extracts functions with support on one of the four parametric edges
 %     getElementContaining - Get element index at parametric point (u,v)
@@ -36,7 +37,7 @@ classdef LRSplineSurface < handle
 %     contourf             - Plot a contour mesh of a given scalar field
 %     plot                 - Plot the mesh structure 
 %     print                - Prints raw c++ lr data structure
-%     tikz                 - Ouput vector graphics tikz figure
+%     tikz                 - Output vector graphics tikz figure
 %     save                 - Saves the backend c++ lr data to file
 %     load                 - Load the backend c++ lr data from file
 %     loadG2               - Load the backend c++ lr data from file
@@ -62,8 +63,8 @@ classdef LRSplineSurface < handle
 		% LRSplineSurface(p, n)
 		% LRSplineSurface(p, knotU, knotV)
 		% LRSplineSurface(p, knotU, knotV, controlpoint)
-		% 
-		%   parameters 
+		%
+		%   parameters
 		%     p            - polynomial degree in each direction (2 components)
 		%     n            - number of basis functions in each direction (2 components)
 		%     knotU        - global open knot vector in u-direction (n(1)+p(1)+1 components)
@@ -101,7 +102,7 @@ classdef LRSplineSurface < handle
 					throw(MException('LRSplineSurface:constructor', 'Error: Control points should have n(1)*n(2) columns'));
 				end
 			end
-			
+
 			this.objectHandle = lrsplinesurface_interface('new', varargin{:});
 			this.bezierHash = [];
 			this.updatePrimitives();
@@ -156,6 +157,52 @@ classdef LRSplineSurface < handle
 			lrsplinesurface_interface('print', this.objectHandle);
 		end
 
+		function localRaiseOrder(this, varargin)
+		% LOCALRAISEORDER  Performs local degree elevation of elements or basis functions
+		% LRSplineSurface.localRaiseOrder()
+		% LRSplineSurface.localRaiseOrder(indices)
+		% LRSplineSurface.localRaiseOrder(indices, 'basis')
+		% LRSplineSurface.localRaiseOrder(indices, 'elements', 'p', newP)
+		%
+		%   parameters:
+		%     indices      - index of the basis function or elements to order elevate
+		%     'elements'   - tag certain elements for degree elevation
+		%     'basis'      - degree elevate certain functions
+		%     'p'          - sets the maximum new polynomial degree to raise
+		%   returns:
+		%     none
+			elements = false;              % and uniform refinement
+			indices  = 1:size(this.knots,1);
+			i        = 0;
+			p        = -1;
+			% read input parameters
+			while(i<nargin-1)
+				i=i+1;
+				if     strcmp(varargin{i}, 'elements')
+					elements = true;
+				elseif strcmp(varargin{i}, 'basis')
+					elements = false;
+				elseif strcmp(varargin{i}, 'p')
+					p = varargin{i+1};
+					i = i+1;
+				elseif(ischar(varargin{i}))
+					throw(MException('LRSplineSurface:refine',  'Error: Unknown refine parameter'));
+				else
+					indices = varargin{i};
+				end
+			end
+
+			% perform refinement
+			if(elements)
+				lrsplinesurface_interface('raise_order_elements', this.objectHandle, indices, p);
+			else
+				lrsplinesurface_interface('raise_order_basis',    this.objectHandle, indices);
+			end
+
+			% new LR-mesh... update static variables
+			this.bezierHash = [];
+			this.updatePrimitives();
+		end
 
 		function refine(this, varargin)
 		% REFINE  Performs local refinement of elements or basis functions. No arguments gives global uniform refinement
@@ -259,7 +306,7 @@ classdef LRSplineSurface < handle
 		function [intLRdu intLRdv] = getAntiDerivative(this)
 		% GETANTIDERIVATIVE gets the two integration space int{dx} and int{dy}
 		% [intLRdu intLRdv] = getAntiDerivative()
-		% 
+		%
 		%   parameters:
 		%     none
 		%   returns:
@@ -426,9 +473,13 @@ classdef LRSplineSurface < handle
 		%     One or all parametric greville abscissae
 			if nargin > 1
 				i = varargin{1};
-				x = [sum(this.knots(i,2:(this.p(1)+1)))/this.p(1), sum(this.knots(i,(this.p(1)+4):(end-1)))/this.p(2)];
+				x = [mean(this.knots{i,1}(2:end-1)), mean(this.knots{i,2}(2:end-1))];
 			else
-				x = [sum(this.knots(:,2:(this.p(1)+1)),2)/this.p(1), sum(this.knots(:,(this.p(1)+4):(end-1)),2)/this.p(2)];
+				n = size(this.knots,1);
+				x = zeros(n,2);
+				for i=1:n
+					x(i,:) = [mean(this.knots{i,1}(2:end-1)), mean(this.knots{i,2}(2:end-1))];
+				end
 			end
 		end
 
@@ -473,7 +524,7 @@ classdef LRSplineSurface < handle
 		% C = LRSplineSurface.getBezierExtraction(element)
 		%
 		%   parameters:
-		%     element - global index to the element 
+		%     element - global index to the element
 		%   returns:
 		%     a matrix with as many rows as there is active basis functions and (p(1)+1)*(p(2)+1) columns
 			if numel(this.bezierHash) == size(this.elements,1)
@@ -531,7 +582,7 @@ classdef LRSplineSurface < handle
 					depth = varargin{i};
 				elseif(strcmp(varargin{i}, 'elements'))
 					elements = true;
-				else 
+				else
 					throw(MException('LRSplineSurface:getEdge', 'Error: Unkown parameters'));
 				end
 			end
@@ -539,41 +590,22 @@ classdef LRSplineSurface < handle
 			if(edge~=0 && edge~=1 && edge~=2 && edge~=3 && edge~=4)
 				throw(MException('LRSplineSurface:getEdge', 'Error: Invalid edge enumeration'));
 			end
-			if(edge == 1 || edge == 0)
-				umin = min(this.elements(:,1));
-				if(elements)
-					index = [index; find(this.elements(:,1) == umin)];
-				else
-					index = [index; find(this.knots(:, this.p(1)+1-depth) == umin)];
+
+			if edge == 0
+				index = []
+				for edg=1:4
+					if elements
+						index = [index; lrsplinesurface_interface('get_edge_elements', this.objectHandle, edg)];
+					else
+						index = [index; lrsplinesurface_interface('get_edge_functions', this.objectHandle, edg, depth)];
+					end
 				end
-			end
-			if(edge == 2 || edge == 0)
-				umax = max(this.elements(:,3));
-				if(elements)
-					index = [index; find(this.elements(:,3) == umax)];
+			else
+				if elements
+					index = lrsplinesurface_interface('get_edge_elements', this.objectHandle, edge);
 				else
-					index = [index; find(this.knots(:, 2+depth) == umax)];
+					index = lrsplinesurface_interface('get_edge_functions', this.objectHandle, edge, depth);
 				end
-			end
-			if(edge == 3 || edge == 0)
-				vmin = min(this.elements(:,2));
-				if(elements)
-					index = [index; find(this.elements(:,2) == vmin)];
-				else
-					index = [index; find(this.knots(:, end-1-depth) == vmin)];
-				end
-			end
-			if(edge == 4 || edge == 0)
-				vmax = max(this.elements(:,4));
-				if(elements)
-					index = [index; find(this.elements(:,4) == vmax)];
-				else
-					index = [index; find(this.knots(:, this.p(1)+4+depth) == vmax)];
-				end
-			end
-			% clear out any duplicates if one requests all edges
-			if(edge == 0)
-				index = unique(index);
 			end
 		end
 
@@ -591,7 +623,7 @@ classdef LRSplineSurface < handle
 		%     'nviz'        - sets the line resolution for plots to use n points for drawing each line
 		%   returns:
 		%     handle to the figure
-			
+
 			nPtsPrLine  = 41;
 			enumeration = false;
 			parametric  = false;
@@ -644,7 +676,7 @@ classdef LRSplineSurface < handle
 				for i=1:size(this.elements, 1),
 					if(parametric)
 						x = [sum(this.elements(i, [1,3]))/2, sum(this.elements(i,[2,4]))/2];
-					else 
+					else
 						x = this.point(sum(this.elements(i, [1,3]))/2, sum(this.elements(i,[2,4]))/2);
 					end
 					text(x(1), x(2), num2str(i));
@@ -656,7 +688,7 @@ classdef LRSplineSurface < handle
 				hold on;
 				for i=1:size(this.knots,1)
 					if parametric
-						x = [sum(this.knots(i,2:(this.p(1)+1))); sum(this.knots(i,(this.p(1)+4):(end-1)))] ./ this.p;
+						x = this.getGrevillePoint(i);
 					else
 						x = this.cp(:,i);
 					end
@@ -678,8 +710,8 @@ classdef LRSplineSurface < handle
 		%
 		%   parameters:
 		%     'nviz'       - sets the plotting resolution to n points per element [default: 6]
-		%     'diffX'      - A is the matrix of function derivatives with respect to X 
-		%     'diffY'      - A is the matrix of function derivatives with respect to Y 
+		%     'diffX'      - A is the matrix of function derivatives with respect to X
+		%     'diffY'      - A is the matrix of function derivatives with respect to Y
 		%     'parametric' - compute parametric derivatives instead of mapped derivatives
 		%   returns:
 		%     A            - is a sparse matrix of size nxm, where n is the number of visualization points and m the number of basis functions
@@ -687,7 +719,7 @@ classdef LRSplineSurface < handle
 		%     edges        - a matrix of 4*nElements colums, each column giving the plot index of the element boundaries
 		%     X            - x-coordinates of mesh evaluation (parametric or physical)
 		%     Y            - y-coordinates of mesh evaluation (parametric or physical)
-		%  
+		%
 		%   Example:
 		%     lr = LRSplineSurface([3,3], [7,7]);
 		%     lr.refine(1, 'basis');
@@ -743,8 +775,8 @@ classdef LRSplineSurface < handle
 
 			bezierKnot1 = [ones(1, this.p(1)+1)*-1, ones(1, this.p(1)+1)];
 			bezierKnot2 = [ones(1, this.p(2)+1)*-1, ones(1, this.p(2)+1)];
-			[bezNu, bezNu_diff] = getBSplineBasisAndDerivative(this.p(1), xg, bezierKnot1); 
-			[bezNv, bezNv_diff] = getBSplineBasisAndDerivative(this.p(2), xg, bezierKnot2); 
+			[bezNu, bezNu_diff] = getBSplineBasisAndDerivative(this.p(1), xg, bezierKnot1);
+			[bezNv, bezNv_diff] = getBSplineBasisAndDerivative(this.p(2), xg, bezierKnot2);
 			ptCount   = 1;
 			meshCount = 1;
 			sparseCount = 1;
@@ -755,8 +787,10 @@ classdef LRSplineSurface < handle
 				vmax = this.elements(iel,4);
 				hu = umax-umin;
 				hv = vmax-vmin;
+				umax = umax - hu*1e-5;
+				vmax = vmax - hv*1e-5;
 				ind  = this.support{iel}; % indices to nonzero basis functions
-				C  = this.getBezierExtraction(iel);
+				C = this.getBezierExtraction(iel);
 
 				%%% build connectivity-array
 				for j=1:nviz-1
@@ -786,7 +820,7 @@ classdef LRSplineSurface < handle
 						% evaluates physical mapping and jacobian
 						x  = this.cp(:,ind) * C * N;
 						J  = this.cp(:,ind) * C * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
-						
+
 						if parametric
 							X(ptCount) = xi;
 							Y(ptCount) = eta;
@@ -798,7 +832,7 @@ classdef LRSplineSurface < handle
 								matrixLine = C*N;
 							end
 						else
-							dNdx = dN * inv(J); 
+							dNdx = dN * inv(J);
 							X(ptCount) = x(1);
 							Y(ptCount) = x(2);
 							if diffX
@@ -890,7 +924,7 @@ classdef LRSplineSurface < handle
 				grevU = zeros(2, nDOF);
 				grevX = zeros(2, nDOF);
 				for i=1:nDOF
-					grevU(:,i) = [sum(this.knots(i,2:(this.p(1)+1))); sum(this.knots(i,(this.p(1)+4):(end-1)))] ./ this.p;
+					grevU(:,i) = this.getGrevillePoint(i);
 					grevX(:,i) = this.point(grevU(1,i), grevU(2,i));
 				end
 			end
@@ -905,8 +939,8 @@ classdef LRSplineSurface < handle
 
 			bezierKnot1 = [ones(1, this.p(1)+1)*-1, ones(1, this.p(1)+1)];
 			bezierKnot2 = [ones(1, this.p(2)+1)*-1, ones(1, this.p(2)+1)];
-			[bezNu, bezNu_diff] = getBSplineBasisAndDerivative(this.p(1), xg, bezierKnot1); 
-			[bezNv, bezNv_diff] = getBSplineBasisAndDerivative(this.p(2), xg, bezierKnot2); 
+			[bezNu, bezNu_diff] = getBSplineBasisAndDerivative(this.p(1), xg, bezierKnot1);
+			[bezNv, bezNv_diff] = getBSplineBasisAndDerivative(this.p(2), xg, bezierKnot2);
 			for iel=1:size(this.elements, 1)
 				umin = this.elements(iel,1);
 				vmin = this.elements(iel,2);
@@ -914,8 +948,10 @@ classdef LRSplineSurface < handle
 				vmax = this.elements(iel,4);
 				hu = umax-umin;
 				hv = vmax-vmin;
+				umax = umax - hu*1e-5;
+				vmax = vmax - hv*1e-5;
 				ind  = this.support{iel}; % indices to nonzero basis functions
-				C  = this.getBezierExtraction(iel);
+				% C  = this.getBezierExtraction(iel);
 				X  = zeros(nviz);
 				Y  = zeros(nviz);
 				U  = zeros(nviz);
@@ -928,15 +964,20 @@ classdef LRSplineSurface < handle
 						eta = (.5*xg(j)+.5)*(vmax-vmin)+vmin;
 
 						% compute all basis functions
-						N     = bezNu(:,i)       * bezNv(:,j)';
-						dNdu  = bezNu_diff(:,i)  * bezNv(:,j)';
-						dNdv  = bezNu(:,i)       * bezNv_diff(:,j)';
-						N     = N(:); % and make results colum vector
-						dN    = [dNdu(:)*2/hu, dNdv(:)*2/hv];
+						N     = this.computeBasis(xi,eta, 1);
+						dN    = N(2:3,:)';
+						N     = N(1,:)';
+						% N     = bezNu(:,i)       * bezNv(:,j)';
+						% dNdu  = bezNu_diff(:,i)  * bezNv(:,j)';
+						% dNdv  = bezNu(:,i)       * bezNv_diff(:,j)';
+						% N     = N(:); % and make results colum vector
+						% dN    = [dNdu(:)*2/hu, dNdv(:)*2/hv];
 
 						% evaluates physical mapping and jacobian
-						x  = this.cp(:,ind) * C * N;
-						J  = this.cp(:,ind) * C * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
+						x  = this.cp(:,ind) * N;
+						J  = this.cp(:,ind) * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
+						% x  = this.cp(:,ind) * C * N;
+						% J  = this.cp(:,ind) * C * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
 
 						% write results depending on type of plot
 						if(parametric)
@@ -946,17 +987,20 @@ classdef LRSplineSurface < handle
 							X(i,j) = x(1);
 							Y(i,j) = x(2);
 							% physical derivatives
-							dNdx = dN * inv(J); 
+							dNdx = dN * inv(J);
 						end
 						if function_result || secondary
 							if secondary
 								if nargin(sec_function)==2 % input parameters x and u
-									U(i,j) = sec_function(x, u(ind) * C * N);
+									U(i,j) = sec_function(x, u(ind) * N);
+									% U(i,j) = sec_function(x, u(ind) * C * N);
 								elseif nargin(sec_function)==3 % input parameters x, u and dudx
 									if parametric
-										U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dN)');
+										U(i,j) = sec_function(x, u(ind) * N, (u(ind) * dN)');
+										% U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dN)');
 									else
-										U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dNdx)');
+										U(i,j) = sec_function(x, u(ind) * N, (u(ind) * dNdx)');
+										% U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dNdx)');
 									end
 								end
 							else
@@ -965,13 +1009,17 @@ classdef LRSplineSurface < handle
 						elseif per_element_result
 							U(i,j) = u(iel);
 						elseif diffX && parametric
-							U(i,j)  = u(ind) * C * dN(:,1);
-						elseif diffX 
-							U(i,j)  = u(ind) * C * dNdx(:,1);
+							U(i,j)  = u(ind) * dN(:,1);
+							% U(i,j)  = u(ind) * C * dN(:,1);
+						elseif diffX
+							U(i,j)  = u(ind) * dNdx(:,1);
+							% U(i,j)  = u(ind) * C * dNdx(:,1);
 						elseif diffY && parametric
-							U(i,j)  = u(ind) * C * dN(:,2);
+							U(i,j)  = u(ind) * dN(:,2);
+							% U(i,j)  = u(ind) * C * dN(:,2);
 						elseif diffY
-							U(i,j)  = u(ind) * C * dNdx(:,2);
+							U(i,j)  = u(ind) * dNdx(:,2);
+							% U(i,j)  = u(ind) * C * dNdx(:,2);
 						elseif mononomial
 							nFun = 0;
 							for iBasis=ind
@@ -988,7 +1036,8 @@ classdef LRSplineSurface < handle
 							end
 							U(i,j) = U(i,j) / nFun;
 						else
-							U(i,j) = u(ind) * C * N;
+							U(i,j) = u(ind) * N;
+							% U(i,j) = u(ind) * C * N;
 						end
 					end
 				end
@@ -1013,7 +1062,7 @@ classdef LRSplineSurface < handle
 			plot3(Xlines', Ylines', Zlines', 'k-');
 			if(per_element_result)
 				view(2);
-			else	
+			else
 				view(3);
 			end
 		end
@@ -1031,7 +1080,7 @@ classdef LRSplineSurface < handle
 		%     u            - control point results  OR  function handle
 		%     v            - contour lines
 		%     'nviz'       - sets the plotting resolution to n points per element
-		%     'diffX'      - plots the derivative with respect to X 
+		%     'diffX'      - plots the derivative with respect to X
 		%     'diffY'      - plots the derivative with respect to Y
 		%     'secondary'  - plots secondary solutions. Must provide input function of the type f=@(x,u,dudx), where x and dudx has two components
 		%     'nofill'     - uses contour, instead of contourf
@@ -1091,8 +1140,8 @@ classdef LRSplineSurface < handle
 
 			bezierKnot1 = [ones(1, this.p(1)+1)*-1, ones(1, this.p(1)+1)];
 			bezierKnot2 = [ones(1, this.p(2)+1)*-1, ones(1, this.p(2)+1)];
-			[bezNu, bezNu_diff] = getBSplineBasisAndDerivative(this.p(1), xg, bezierKnot1); 
-			[bezNv, bezNv_diff] = getBSplineBasisAndDerivative(this.p(2), xg, bezierKnot2); 
+			[bezNu, bezNu_diff] = getBSplineBasisAndDerivative(this.p(1), xg, bezierKnot1);
+			[bezNv, bezNv_diff] = getBSplineBasisAndDerivative(this.p(2), xg, bezierKnot2);
 			for iel=1:size(this.elements, 1)
 				umin = this.elements(iel,1);
 				vmin = this.elements(iel,2);
@@ -1100,8 +1149,10 @@ classdef LRSplineSurface < handle
 				vmax = this.elements(iel,4);
 				hu = umax-umin;
 				hv = vmax-vmin;
+				umax = umax - hu*1e-5;
+				vmax = vmax - hv*1e-5;
 				ind  = this.support{iel}; % indices to nonzero basis functions
-				C  = this.getBezierExtraction(iel);
+				% C  = this.getBezierExtraction(iel);
 				X  = zeros(nviz);
 				Y  = zeros(nviz);
 				U  = zeros(nviz);
@@ -1114,15 +1165,20 @@ classdef LRSplineSurface < handle
 						eta = (.5*xg(j)+.5)*(vmax-vmin)+vmin;
 
 						% compute all basis functions
-						N     = bezNu(:,i)       * bezNv(:,j)';
-						dNdu  = bezNu_diff(:,i)  * bezNv(:,j)';
-						dNdv  = bezNu(:,i)       * bezNv_diff(:,j)';
-						N     = N(:); % and make results colum vector
-						dN    = [dNdu(:)*2/hu, dNdv(:)*2/hv];
+						N     = this.computeBasis(xi,eta, 1);
+						dN    = N(2:3,:)';
+						N     = N(1,:)';
+						% N     = bezNu(:,i)       * bezNv(:,j)';
+						% dNdu  = bezNu_diff(:,i)  * bezNv(:,j)';
+						% dNdv  = bezNu(:,i)       * bezNv_diff(:,j)';
+						% N     = N(:); % and make results colum vector
+						% dN    = [dNdu(:)*2/hu, dNdv(:)*2/hv];
 
 						% evaluates physical mapping and jacobian
-						x  = this.cp(:,ind) * C * N;
-						J  = this.cp(:,ind) * C * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
+						x  = this.cp(:,ind) * N;
+						J  = this.cp(:,ind) * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
+						% x  = this.cp(:,ind) * C * N;
+						% J  = this.cp(:,ind) * C * dN; % jacobian matrix [dx/du,dx/dv; dy/du, dy/dv]
 
 						% write results depending on type of plot
 						if(parametric)
@@ -1132,32 +1188,40 @@ classdef LRSplineSurface < handle
 							X(i,j) = x(1);
 							Y(i,j) = x(2);
 							% physical derivatives
-							dNdx = dN * inv(J); 
+							dNdx = dN * inv(J);
 						end
 						if function_result || secondary
 							if secondary
 								if nargin(sec_function)==2 % input parameters x and u
-									U(i,j) = sec_function(x, u(ind) * C * N);
+									U(i,j) = sec_function(x, u(ind) * N);
+									% U(i,j) = sec_function(x, u(ind) * C * N);
 								elseif nargin(sec_function)==3 % input parameters x, u and dudx
 									if parametric
-										U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dN)');
+										U(i,j) = sec_function(x, u(ind) * N, (u(ind) * dN)');
+										% U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dN)');
 									else
-										U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dNdx)');
+										U(i,j) = sec_function(x, u(ind) * N, (u(ind) * dNdx)');
+										% U(i,j) = sec_function(x, u(ind) * C * N, (u(ind) * C * dNdx)');
 									end
 								end
 							else
 								U(i,j) = u([X(i,j);Y(i,j)]);
 							end
 						elseif diffX && parametric
-							U(i,j)  = u(ind) * C * dN(:,1);
-						elseif diffX 
-							U(i,j)  = u(ind) * C * dNdx(:,1);
+							U(i,j)  = u(ind) * dN(:,1);
+							% U(i,j)  = u(ind) * C * dN(:,1);
+						elseif diffX
+							U(i,j)  = u(ind) * dNdx(:,1);
+							% U(i,j)  = u(ind) * C * dNdx(:,1);
 						elseif diffY && parametric
-							U(i,j)  = u(ind) * C * dN(:,2);
+							U(i,j)  = u(ind) * dN(:,2);
+							% U(i,j)  = u(ind) * C * dN(:,2);
 						elseif diffY
-							U(i,j)  = u(ind) * C * dNdx(:,2);
+							U(i,j)  = u(ind) * dNdx(:,2);
+							% U(i,j)  = u(ind) * C * dNdx(:,2);
 						else
-							U(i,j) = u(ind) * C * N;
+							U(i,j) = u(ind) * N;
+							% U(i,j) = u(ind) * C * N;
 						end
 					end
 				end
@@ -1241,7 +1305,7 @@ classdef LRSplineSurface < handle
 			if numel(m) == 1,
 				m = ones(size(start,1),1)*m;
 			end
-				
+
 			for i=1:size(start,1)
 				lrsplinesurface_interface('insert_line', this.objectHandle, start(i,:),stop(i,:),m(i));
 			end
@@ -1258,7 +1322,7 @@ classdef LRSplineSurface < handle
 				[x,y] = meshgrid(this.elements(i,[1,3]), this.elements(i,[2,4]));
 				keep  = false;
 				for j=1:2
-					for k=1:2,	
+					for k=1:2,
 						if ~toBeClipped(x(j,k), y(j,k))
 							keep = true;
 							break;
@@ -1274,10 +1338,10 @@ classdef LRSplineSurface < handle
 
 			removeBasis = [];
 			for i=1:size(this.knots,1)
-				[x,y] = meshgrid(this.knots(i,[1,this.p(1)+2]), this.knots(i,[this.p(1)+3, this.p(1)+this.p(2)+4]));
+				[x,y] = meshgrid(this.knots{i,1}([1,end]), this.knots{i,2}([1,end]));
 				keep  = false;
 				for j=1:2
-					for k=1:2,	
+					for k=1:2,
 						if ~toBeClipped(x(j,k), y(j,k))
 							keep = true;
 						end
@@ -1316,10 +1380,10 @@ classdef LRSplineSurface < handle
 			[this.knots, this.cp, this.w, ...
 			 this.lines, this.elements,   ...
 			 this.support, this.p] = lrsplinesurface_interface('get_primitives', this.objectHandle);
-			this.bezierHash = cell(size(this.elements,1),1);
-			for i=1:numel(this.bezierHash)
-				this.bezierHash{i} = lrsplinesurface_interface('get_bezier_extraction', this.objectHandle, i);
-			end
+%		this.bezierHash = cell(size(this.elements,1),1);
+%		for i=1:numel(this.bezierHash)
+%			this.bezierHash{i} = lrsplinesurface_interface('get_bezier_extraction', this.objectHandle, i);
+%		end
 			this.func2elm = sparse(size(this.knots,1), size(this.elements,1));
 			for i=1:size(this.elements,1)
 				this.func2elm(this.support{i}, i) = 1;

@@ -32,7 +32,7 @@ classdef LRNURBSSurface < handle
 %     contourf             - Plot a contour mesh of a given scalar field
 %     plot                 - Plot the mesh structure 
 %     print                - Prints raw c++ lr data structure
-%     tikz                 - Ouput vector graphics tikz figure
+%     tikz                 - Output vector graphics tikz figure
 %     save                 - Saves the backend c++ lr data to file
 %     load                 - Loads the backend c++ lr data from file
 
