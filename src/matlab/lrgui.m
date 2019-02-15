@@ -8,28 +8,35 @@ function lrgui
   %  Create and then hide the GUI as it is being constructed.
   f = figure('Visible','off','Position',[360,500,450,285]);
 
-  %  Construct the components.
+    %  Construct the components.
   hnew = uicontrol('Style','pushbutton','String','New',...
-         'Position',[315,240,70,25],...
+         'Position',[315,250,70,20],...
          'Callback',@newbutton_Callback);
   hrefine = uicontrol('Style','pushbutton',...
          'String','Refine',...
-         'Position',[315,200,70,25],...
-         'Callback',@refinebutton_Callback); 
+         'Position',[315,220,70,20],...
+         'Callback',@refinebutton_Callback);
+  hraise = uicontrol('Style','pushbutton',...
+         'String','Raise Order',...
+         'Position',[315,190,70,20],...
+         'Callback',@raisebutton_Callback);
   hload = uicontrol('Style','pushbutton','String','Load',...
-         'Position',[315,160,70,25],...
+         'Position',[315,160,70,20],...
          'Callback',@loadbutton_Callback);
   hsave = uicontrol('Style','pushbutton','String','Save',...
-         'Position',[315,120,70,25],...
+         'Position',[315,130,70,20],...
          'Callback',@savebutton_Callback);
+  htikz = uicontrol('Style','pushbutton','String','Tikz',...
+         'Position',[315,100,70,20],...
+         'Callback',@tikzbutton_Callback);
   htext = uicontrol('Style','text','String','Refinement strategy',...
-         'Position',[300,60,80,35]);
+         'Position',[300,40,80,35]);
   hpopup = uicontrol('Style','popupmenu',...
          'String',{'Elements','Functions'},...
          'Position',[300,30,100,25],...
          'Callback',@popup_menu_Callback);
-  ha = axes('Units','Pixels','Position',[50,60,200,185]); 
-  align([hnew,hrefine,hload,hsave,htext,hpopup],'Center','None');
+  ha = axes('Units','Pixels','Position',[50,60,200,185]);
+  align([hnew,hrefine,hraise,hload,hsave,htikz,htext,hpopup],'Center','None');
   
   % Create the data to plot.
   current_mesh = LRSplineSurface([3,3], [10,10]);
@@ -41,6 +48,7 @@ function lrgui
   ha.Units = 'normalized';
   hnew.Units = 'normalized';
   hload.Units = 'normalized';
+  htikz.Units = 'normalized';
   hsave.Units = 'normalized';
   hrefine.Units = 'normalized';
   htext.Units = 'normalized';
@@ -126,6 +134,14 @@ function lrgui
     end
   end
 
+  function tikzbutton_Callback(source,eventdata)
+  % Display mesh plot of the currently selected data.
+    [file path] = uiputfile('out.tex');
+    if file ~= 0
+      current_mesh.tikz([path,file]);
+    end
+  end
+
   % Keyboard callbacks (hotkeys)
 
   function keypress(src, e)
@@ -142,6 +158,8 @@ function lrgui
         loadbutton_Callback(src, e);
       case 's'
         savebutton_Callback(src, e);
+      case 't'
+        tikzbutton_Callback(src, e);
       case 'n'
         newbutton_Callback(src, e);
     end
